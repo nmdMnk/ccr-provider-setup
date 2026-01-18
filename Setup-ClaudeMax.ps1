@@ -1,16 +1,20 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Automates CLIProxyAPI installation/updates and configures claude-code-router for Anthropic Max subscription.
+    Automates CLIProxyAPI installation/updates and configures claude-code-router for Claude Max and Qwen.
 
 .DESCRIPTION
     This script runs as normal user. Only the installation step (writing to Program Files) requires admin elevation.
     1. Downloads/updates CLIProxyAPI from GitHub (admin elevation for install only)
     2. Creates config.yaml for CLIProxyAPI
-    3. Handles Claude authentication via browser (works normally as user)
-    4. Starts the proxy and waits for port 8317
-    5. Configures claude-code-router with claude-max provider
-    6. Restarts CCR to apply changes
+    3. Handles Claude authentication via browser
+    4. Handles Qwen authentication via browser (optional)
+    5. Starts the proxy and waits for port 8317
+    6. Configures claude-code-router with CLIProxyAPI provider (Claude + Qwen models)
+    7. Restarts CCR to apply changes
+
+.PARAMETER SkipQwen
+    Skip Qwen authentication and provider setup
 
 .NOTES
     Author: CCRSetup
@@ -20,7 +24,8 @@
 param(
     [string]$InstallPath = "C:\Program Files\CLIProxyAPI",
     [int]$ProxyPort = 8317,
-    [string]$ThinkModel = "claude-opus-4-20250514"
+    [string]$ThinkModel = "claude-opus-4-20250514",
+    [switch]$SkipQwen
 )
 
 $ErrorActionPreference = "Stop"
@@ -56,7 +61,7 @@ function Stop-OrphanProcesses([int]$Port) {
     }
 }
 
-Write-Host "=== CLIProxyAPI Setup for Claude Max ===" -ForegroundColor Cyan
+Write-Host "=== CLIProxyAPI Setup for Claude Max & Qwen ===" -ForegroundColor Cyan
 Write-Host ""
 
 # ============================================================================
@@ -230,11 +235,53 @@ if (-not $authFiles -or $authFiles.Count -eq 0) {
         Write-Host "Warning: Authentication timeout." -ForegroundColor Yellow
     }
 } else {
-    Write-Host "Authentication found" -ForegroundColor Green
+    Write-Host "Claude authentication found" -ForegroundColor Green
 }
 
 # ============================================================================
-# 6. Start Proxy
+# 6. Qwen Login (if needed)
+# ============================================================================
+if (-not $SkipQwen) {
+    Write-Host ""
+    Write-Host "Checking Qwen authentication..." -ForegroundColor Cyan
+
+    $qwenAuthFiles = Get-ChildItem -Path $env:USERPROFILE -Filter "qwen-*.json" -ErrorAction SilentlyContinue
+
+    if (-not $qwenAuthFiles -or $qwenAuthFiles.Count -eq 0) {
+        Write-Host "No Qwen authentication found. Starting Qwen login..." -ForegroundColor Yellow
+        Write-Host "Click the link below to authenticate:" -ForegroundColor Yellow
+        Write-Host ""
+
+        $loginProc = Start-Process -FilePath $exePath -ArgumentList "--qwen-login" -WorkingDirectory $env:USERPROFILE -PassThru
+
+        Write-Host "Waiting for Qwen authentication (max 120s)..."
+        $timeout = 120
+        $elapsed = 0
+        while ($elapsed -lt $timeout) {
+            $qwenAuthFiles = Get-ChildItem -Path $env:USERPROFILE -Filter "qwen-*.json" -ErrorAction SilentlyContinue
+            if ($qwenAuthFiles -and $qwenAuthFiles.Count -gt 0) {
+                Write-Host ""
+                Write-Host "Qwen authentication successful!" -ForegroundColor Green
+                Stop-Process -Id $loginProc.Id -Force -ErrorAction SilentlyContinue
+                break
+            }
+            Start-Sleep -Seconds 2
+            $elapsed += 2
+            Write-Host "." -NoNewline
+        }
+        Write-Host ""
+
+        if ($elapsed -ge $timeout) {
+            Write-Host "Warning: Qwen authentication timeout. Skipping Qwen setup." -ForegroundColor Yellow
+            $SkipQwen = $true
+        }
+    } else {
+        Write-Host "Qwen authentication found" -ForegroundColor Green
+    }
+}
+
+# ============================================================================
+# 7. Start Proxy
 # ============================================================================
 Write-Host ""
 Write-Host "Starting proxy..." -ForegroundColor Cyan
@@ -268,7 +315,7 @@ if (Test-Port $ProxyPort) {
 }
 
 # ============================================================================
-# 7. Configure claude-code-router
+# 8. Configure claude-code-router
 # ============================================================================
 Write-Host ""
 Write-Host "Configuring claude-code-router..." -ForegroundColor Cyan
@@ -282,29 +329,38 @@ if (-not (Test-Path $configPath)) {
 
 $configText = Get-Content $configPath -Raw -Encoding UTF8
 
-if ($configText -notmatch '"name":\s*"claude-max"') {
-    Write-Host "Adding claude-max provider..." -ForegroundColor Yellow
+# Build models list based on what's authenticated
+$models = @(
+    "claude-opus-4-20250514",
+    "claude-sonnet-4-20250514"
+)
+if (-not $SkipQwen) {
+    $models += @("qwen3-coder-plus", "qwen3-coder-flash")
+}
+$modelsJson = ($models | ForEach-Object { "`"$_`"" }) -join ",`n        "
+
+if ($configText -notmatch '"name":\s*"CLIProxyAPI"') {
+    Write-Host "Adding CLIProxyAPI provider..." -ForegroundColor Yellow
 
     $providerJson = @"
 ,
     {
-      "name": "claude-max",
+      "name": "CLIProxyAPI",
       "api_base_url": "http://localhost:$ProxyPort/v1/chat/completions",
       "api_key": "not-required",
       "models": [
-        "claude-opus-4-20250514",
-        "claude-sonnet-4-20250514"
+        $modelsJson
       ]
     }
 "@
     $configText = $configText -replace '(\}\s*)\n(\s*\],\s*\n\s*"StatusLine")', "`$1$providerJson`n`$2"
-    Write-Host "Added claude-max provider" -ForegroundColor Green
+    Write-Host "Added CLIProxyAPI provider" -ForegroundColor Green
 } else {
-    Write-Host "claude-max already configured" -ForegroundColor Green
+    Write-Host "CLIProxyAPI already configured" -ForegroundColor Green
 }
 
-if ($configText -notmatch '"think":\s*"claude-max') {
-    $configText = $configText -replace '("think":\s*)"[^"]*"', "`$1`"claude-max,$ThinkModel`""
+if ($configText -notmatch '"think":\s*"CLIProxyAPI') {
+    $configText = $configText -replace '("think":\s*)"[^"]*"', "`$1`"CLIProxyAPI,$ThinkModel`""
     Write-Host "Updated Router.think" -ForegroundColor Gray
 }
 
@@ -312,7 +368,7 @@ if ($configText -notmatch '"think":\s*"claude-max') {
 Write-Host "Config saved" -ForegroundColor Green
 
 # ============================================================================
-# 8. Restart CCR
+# 9. Restart CCR
 # ============================================================================
 Write-Host ""
 Write-Host "Restarting CCR..." -ForegroundColor Cyan

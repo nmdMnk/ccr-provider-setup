@@ -1,27 +1,31 @@
 # CCRSetup Project
 
 ## Overview
-PowerShell scripts for automating CLIProxyAPI installation and claude-code-router configuration to use Anthropic Max subscription.
+PowerShell scripts for automating CLIProxyAPI installation and claude-code-router configuration to use Anthropic Max subscription and Qwen.
 
 ## Files
-- `Setup-ClaudeMax.ps1` - Main setup script
+- `Setup-ClaudeMax.ps1` - Main setup script (Claude Max + Qwen)
 - `Uninstall-ClaudeMax.ps1` - Uninstall script
 
 ## Usage
 
 ### Run Setup
 ```powershell
-# Run as Administrator
+# Setup both Claude Max and Qwen
 .\Setup-ClaudeMax.ps1
+
+# Skip Qwen setup
+.\Setup-ClaudeMax.ps1 -SkipQwen
 ```
 
 The script will:
-1. Check/elevate admin privileges
+1. Check/elevate admin privileges (only for install)
 2. Download/update CLIProxyAPI from GitHub
 3. Open browser for Claude authentication (if needed)
-4. Start proxy on port 8317
-5. Add `claude-max` provider to CCR config
-6. Restart claude-code-router
+4. Open browser for Qwen authentication (if needed)
+5. Start proxy on port 8317
+6. Add `CLIProxyAPI` provider to CCR config (with all models)
+7. Restart claude-code-router
 
 ### Run Uninstall
 ```powershell
@@ -50,29 +54,42 @@ ccr code
 `C:\Program Files\CLIProxyAPI`
 
 ### Auth Tokens
-`~/.cli-proxy-api/claude-*.json`
+- Claude: `~/claude-*.json`
+- Qwen: `~/qwen-*.json`
 
 ### CCR Provider Added
 ```json
 {
-  "name": "claude-max",
+  "name": "CLIProxyAPI",
   "api_base_url": "http://localhost:8317/v1/chat/completions",
   "api_key": "not-required",
-  "models": ["claude-opus-4-20250514", "claude-sonnet-4-20250514"]
+  "models": [
+    "claude-opus-4-20250514",
+    "claude-sonnet-4-20250514",
+    "qwen3-coder-plus",
+    "qwen3-coder-flash"
+  ]
 }
 ```
 
 ### Router Configuration
-The script sets `Router.think` to `claude-max,claude-opus-4-20250514`
+The script sets `Router.think` to `CLIProxyAPI,claude-opus-4-20250514`
 
 ### Available Models (CLIProxyAPI)
 Query models: `curl http://localhost:8317/v1/models`
+
+**Claude:**
 - claude-opus-4-20250514
 - claude-sonnet-4-20250514
 - claude-opus-4-5-20251101
 - claude-sonnet-4-5-20250929
 - claude-3-7-sonnet-20250219
 - claude-3-5-haiku-20241022
+
+**Qwen:**
+- qwen3-coder-plus
+- qwen3-coder-flash
+- vision-model
 
 ## Autostart
 CLIProxyAPI must be running for the proxy to work. To autostart:

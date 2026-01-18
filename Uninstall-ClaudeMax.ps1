@@ -1,14 +1,14 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Uninstalls CLIProxyAPI and removes claude-max configuration from claude-code-router.
+    Uninstalls CLIProxyAPI and removes claude-max/qwen configuration from claude-code-router.
 
 .DESCRIPTION
     This script:
     1. Stops CLIProxyAPI and CCR processes
-    2. Removes claude-max provider from CCR config
+    2. Removes CLIProxyAPI provider from CCR config
     3. Removes CLIProxyAPI from Program Files (requires admin)
-    4. Removes config.yaml and auth files
+    4. Removes config.yaml and auth files (Claude and Qwen)
 
 .NOTES
     Author: CCRSetup
@@ -45,7 +45,7 @@ function Stop-OrphanProcesses([int]$Port) {
     }
 }
 
-Write-Host "=== Uninstall CLIProxyAPI / Claude Max ===" -ForegroundColor Cyan
+Write-Host "=== Uninstall CLIProxyAPI / Claude Max & Qwen ===" -ForegroundColor Cyan
 Write-Host ""
 
 # ============================================================================
@@ -61,28 +61,28 @@ Write-Host "Processes stopped" -ForegroundColor Green
 Write-Host ""
 
 # ============================================================================
-# 2. Remove claude-max from CCR config
+# 2. Remove CLIProxyAPI from CCR config
 # ============================================================================
-Write-Host "Removing claude-max from CCR config..." -ForegroundColor Cyan
+Write-Host "Removing CLIProxyAPI provider from CCR config..." -ForegroundColor Cyan
 
 $configPath = Join-Path $env:USERPROFILE ".claude-code-router\config.json"
 
 if (Test-Path $configPath) {
     $configText = Get-Content $configPath -Raw -Encoding UTF8
 
-    if ($configText -match '"name":\s*"claude-max"') {
-        # Remove claude-max provider block
-        # Match: comma + whitespace + the entire claude-max object
-        $configText = $configText -replace ',\s*\{\s*"name":\s*"claude-max"[^}]*"models":\s*\[[^\]]*\]\s*\}', ''
-
-        # Update Router.think to remove claude-max (set to first available or empty)
-        $configText = $configText -replace '"think":\s*"claude-max,[^"]*"', '"think": "qwen,qwen3-coder-plus"'
-
-        [System.IO.File]::WriteAllText($configPath, $configText, [System.Text.UTF8Encoding]::new($false))
-        Write-Host "Removed claude-max provider" -ForegroundColor Green
+    # Remove CLIProxyAPI provider block
+    if ($configText -match '"name":\s*"CLIProxyAPI"') {
+        $configText = $configText -replace ',\s*\{\s*"name":\s*"CLIProxyAPI"[^}]*"models":\s*\[[^\]]*\]\s*\}', ''
+        Write-Host "Removed CLIProxyAPI provider" -ForegroundColor Green
     } else {
-        Write-Host "claude-max not found in config" -ForegroundColor Gray
+        Write-Host "CLIProxyAPI not found in config" -ForegroundColor Gray
     }
+
+    # Reset Router.think to empty
+    $configText = $configText -replace '"think":\s*"CLIProxyAPI,[^"]*"', '"think": ""'
+
+    [System.IO.File]::WriteAllText($configPath, $configText, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "Config updated" -ForegroundColor Green
 } else {
     Write-Host "CCR config not found" -ForegroundColor Gray
 }
@@ -126,14 +126,26 @@ Write-Host ""
 if (-not $KeepAuth) {
     Write-Host "Removing auth files..." -ForegroundColor Cyan
 
-    $authFiles = Get-ChildItem -Path $env:USERPROFILE -Filter "claude-*.json" -ErrorAction SilentlyContinue
-    if ($authFiles) {
-        foreach ($file in $authFiles) {
+    # Remove Claude auth files
+    $claudeAuthFiles = Get-ChildItem -Path $env:USERPROFILE -Filter "claude-*.json" -ErrorAction SilentlyContinue
+    if ($claudeAuthFiles) {
+        foreach ($file in $claudeAuthFiles) {
             Remove-Item $file.FullName -Force
             Write-Host "Removed: $($file.Name)" -ForegroundColor Green
         }
     } else {
-        Write-Host "No auth files found" -ForegroundColor Gray
+        Write-Host "No Claude auth files found" -ForegroundColor Gray
+    }
+
+    # Remove Qwen auth files
+    $qwenAuthFiles = Get-ChildItem -Path $env:USERPROFILE -Filter "qwen-*.json" -ErrorAction SilentlyContinue
+    if ($qwenAuthFiles) {
+        foreach ($file in $qwenAuthFiles) {
+            Remove-Item $file.FullName -Force
+            Write-Host "Removed: $($file.Name)" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "No Qwen auth files found" -ForegroundColor Gray
     }
 } else {
     Write-Host "Keeping auth files (-KeepAuth specified)" -ForegroundColor Yellow
@@ -168,10 +180,10 @@ Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Removed:" -ForegroundColor Gray
 Write-Host "  - CLIProxyAPI from $InstallPath" -ForegroundColor Gray
-Write-Host "  - claude-max provider from CCR" -ForegroundColor Gray
+Write-Host "  - CLIProxyAPI provider from CCR" -ForegroundColor Gray
 Write-Host "  - config.yaml" -ForegroundColor Gray
 if (-not $KeepAuth) {
-    Write-Host "  - Auth files (claude-*.json)" -ForegroundColor Gray
+    Write-Host "  - Auth files (claude-*.json, qwen-*.json)" -ForegroundColor Gray
 }
 Write-Host ""
 Write-Host "To reinstall: .\Setup-ClaudeMax.ps1" -ForegroundColor Cyan
