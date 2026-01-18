@@ -1,0 +1,17 @@
+# Claude Code local settings
+.claude/
+
+# Windows artifacts
+nul
+Thumbs.db
+desktop.ini
+
+# Temp/backup files
+*.tmp
+*.bak
+*.log
+*~
+
+# Auth files (if accidentally copied here)
+claude-*.json
+config.yaml
