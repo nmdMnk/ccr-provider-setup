@@ -24,7 +24,6 @@
 param(
     [string]$InstallPath = "C:\Program Files\CLIProxyAPI",
     [int]$ProxyPort = 8317,
-    [string]$ThinkModel = "claude-opus-4-20250514",
     [switch]$SkipQwen
 )
 
@@ -342,9 +341,8 @@ $modelsJson = ($models | ForEach-Object { "`"$_`"" }) -join ",`n        "
 if ($configText -notmatch '"name":\s*"CLIProxyAPI"') {
     Write-Host "Adding CLIProxyAPI provider..." -ForegroundColor Yellow
 
-    $providerJson = @"
-,
-    {
+    $providerBlock = @"
+{
       "name": "CLIProxyAPI",
       "api_base_url": "http://localhost:$ProxyPort/v1/chat/completions",
       "api_key": "not-required",
@@ -353,16 +351,29 @@ if ($configText -notmatch '"name":\s*"CLIProxyAPI"') {
       ]
     }
 "@
-    $configText = $configText -replace '(\}\s*)\n(\s*\],\s*\n\s*"StatusLine")', "`$1$providerJson`n`$2"
-    Write-Host "Added CLIProxyAPI provider" -ForegroundColor Green
+
+    # Case 1: Empty Providers array - "Providers": []
+    if ($configText -match '"Providers":\s*\[\s*\]') {
+        $configText = $configText -replace '"Providers":\s*\[\s*\]', "`"Providers`": [$providerBlock]"
+        Write-Host "Added CLIProxyAPI provider (to empty array)" -ForegroundColor Green
+    }
+    # Case 2: Existing providers - insert before closing ] with StatusLine after
+    elseif ($configText -match '(\}\s*)\n(\s*\],\s*\n\s*"StatusLine")') {
+        $configText = $configText -replace '(\}\s*)\n(\s*\],\s*\n\s*"StatusLine")', "`$1,`n    $providerBlock`n`$2"
+        Write-Host "Added CLIProxyAPI provider" -ForegroundColor Green
+    }
+    # Case 3: Existing providers - insert before closing ] (no StatusLine)
+    elseif ($configText -match '(\}\s*)\n(\s*\],\s*\n\s*"Router")') {
+        $configText = $configText -replace '(\}\s*)\n(\s*\],\s*\n\s*"Router")', "`$1,`n    $providerBlock`n`$2"
+        Write-Host "Added CLIProxyAPI provider" -ForegroundColor Green
+    }
+    else {
+        Write-Host "Warning: Could not find insertion point for provider" -ForegroundColor Yellow
+    }
 } else {
     Write-Host "CLIProxyAPI already configured" -ForegroundColor Green
 }
 
-if ($configText -notmatch '"think":\s*"CLIProxyAPI') {
-    $configText = $configText -replace '("think":\s*)"[^"]*"', "`$1`"CLIProxyAPI,$ThinkModel`""
-    Write-Host "Updated Router.think" -ForegroundColor Gray
-}
 
 [System.IO.File]::WriteAllText($configPath, $configText, [System.Text.UTF8Encoding]::new($false))
 Write-Host "Config saved" -ForegroundColor Green
