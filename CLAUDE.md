@@ -1,21 +1,43 @@
 # CCRSetup Project
 
 ## Overview
-PowerShell scripts for automating CLIProxyAPI installation and claude-code-router configuration to use Anthropic Max subscription and Qwen.
+PowerShell scripts for automating CLIProxyAPI installation and claude-code-router configuration to use Anthropic Max subscription, Qwen, Codex, and Antigravity.
 
 ## Files
-- `Setup-ClaudeMax.ps1` - Main setup script (Claude Max + Qwen)
+- `Menu-CCRSetup.ps1` - **Interactive menu** (recommended)
+- `Setup-ClaudeMax.ps1` - Automated setup script (Claude Max + Qwen + Codex + Antigravity)
 - `Uninstall-ClaudeMax.ps1` - Uninstall script
+- `CCRSetup-Functions.ps1` - Shared functions library
 
 ## Usage
 
-### Run Setup
+### Interactive Menu (Recommended)
+```powershell
+.\Menu-CCRSetup.ps1
+```
+
+The menu displays real-time status and provides options for:
+- **Installation**: Install/update CLIProxyAPI, configure config.yaml
+- **Authentication**: Login Claude, Login Qwen, Login Codex, Login Antigravity, Remove auth
+- **Services**: Start/Stop Proxy, Restart CCR, Clean orphan processes
+- **CCR Configuration**: Add/Remove provider, Show available models
+- **Uninstall**: Remove CLIProxyAPI or everything
+
+Press `S` for complete automated setup, `R` to refresh status, `Q` to quit.
+
+### Automated Setup
 ```powershell
 # Setup both Claude Max and Qwen
 .\Setup-ClaudeMax.ps1
 
 # Skip Qwen setup
 .\Setup-ClaudeMax.ps1 -SkipQwen
+
+# Skip Codex setup
+.\Setup-ClaudeMax.ps1 -SkipCodex
+
+# Skip Antigravity setup
+.\Setup-ClaudeMax.ps1 -SkipAntigravity
 ```
 
 The script will:
@@ -23,9 +45,11 @@ The script will:
 2. Download/update CLIProxyAPI from GitHub
 3. Open browser for Claude authentication (if needed)
 4. Open browser for Qwen authentication (if needed)
-5. Start proxy on port 8317
-6. Add `CLIProxyAPI` provider to CCR config (with all models)
-7. Restart claude-code-router
+5. Open browser for Codex authentication (if needed)
+6. Open browser for Antigravity authentication (if needed)
+7. Start proxy on port 8317
+8. Add `CLIProxyAPI` provider to CCR config (with all models)
+9. Restart claude-code-router
 
 ### Run Uninstall
 ```powershell
@@ -56,6 +80,8 @@ ccr code
 ### Auth Tokens
 - Claude: `~/claude-*.json`
 - Qwen: `~/qwen-*.json`
+- Codex: `~/codex-*.json`
+- Antigravity:`~/antigravity-*.json`
 
 ### CCR Provider Added
 ```json
@@ -67,10 +93,19 @@ ccr code
     "claude-opus-4-20250514",
     "claude-sonnet-4-20250514",
     "qwen3-coder-plus",
-    "qwen3-coder-flash"
+    "qwen3-coder-flash",
+    "gpt-5-codex",
+    "gpt-5-codex-mini",
+    "gpt-5.1-codex",
+    "gpt-5.1-codex-mini",
+    "gpt-5.1-codex-max",
+    "gpt-5.2-codex",
+    "gemini-3-pro-preview",
+    "gemini-3-flash-preview"
   ]
 }
 ```
+Models are added based on authentication: Claude models always, Qwen if Qwen auth exists, Codex if Codex auth exists, Antigravity if Antigravity auth exists.
 
 ### Router Configuration
 The script sets `Router.think` to `CLIProxyAPI,claude-opus-4-20250514`
@@ -90,6 +125,20 @@ Query models: `curl http://localhost:8317/v1/models`
 - qwen3-coder-plus
 - qwen3-coder-flash
 - vision-model
+
+**Codex/OpenAI:**
+- gpt-5-codex
+- gpt-5-codex-mini
+- gpt-5.1-codex
+- gpt-5.1-codex-mini
+- gpt-5.1-codex-max
+- gpt-5.2-codex
+
+**Antigravity:**
+- gemini-3-pro-preview
+- gemini-3-flash-preview
+- gemini-3-pro-image-preview
+- gemini-2.5-computer-use-preview-10-2025
 
 ## Autostart
 CLIProxyAPI must be running for the proxy to work. To autostart:
@@ -202,3 +251,4 @@ $configText = $configText -replace 'pattern', 'replacement'
 curl http://localhost:8317/v1/models
 ```
 Use `claude-opus-4-20250514` instead of `claude-opus-4-20250115`.
+
